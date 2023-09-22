@@ -128,6 +128,19 @@ func (w *Wallet_Memory) InsertReplace(scid crypto.Hash, e rpc.Entry) {
 	w.account.EntriesNative[scid] = entries
 }
 
+func (w *Wallet_Memory) TokenAdd(scid crypto.Hash) (err error) {
+	w.Lock()
+	defer w.Unlock()
+
+	if _, ok := w.account.EntriesNative[scid]; !ok {
+		w.account.EntriesNative[scid] = []rpc.Entry{}
+	} else {
+		return fmt.Errorf("token already added")
+	}
+
+	return nil
+}
+
 // generate keys from using random numbers
 func Generate_Keys_From_Random() (user *Account, err error) {
 	user = &Account{Ringsize: 16, FeesMultiplier: 2.0}
@@ -294,24 +307,40 @@ func (w *Wallet_Memory) Get_Payments_DestinationPort(scid crypto.Hash, port uint
 }
 
 // return all payments within a tx there can be only 1 entry
+// ZERO SCID will also search in all other tokens
 // NOTE: what about multiple payments
-func (w *Wallet_Memory) Get_Payments_TXID(txid string) (entry rpc.Entry) {
+func (w *Wallet_Memory) Get_Payments_TXID(scid crypto.Hash, txid string) (crypto.Hash, rpc.Entry) {
 	w.Lock()
 	defer w.Unlock()
 
-	var zerohash crypto.Hash
-	all_entries := w.account.EntriesNative[zerohash]
-	if all_entries == nil || len(all_entries) < 1 {
-		return
+	all_entries := w.account.EntriesNative[scid]
+	if (all_entries == nil || len(all_entries) < 1) && !scid.IsZero() {
+		return scid, rpc.Entry{}
 	}
 
 	for _, e := range all_entries {
 		if txid == e.TXID {
-			return e
+			return scid, e
 		}
 	}
 
-	return
+	// Its zero, maybe its optional, check in all others tokens
+	if scid.IsZero() {
+		for scid, entries := range w.account.EntriesNative {
+			// we already processed it, skip it
+			if scid.IsZero() {
+				continue
+			}
+
+			for _, e := range entries {
+				if txid == e.TXID {
+					return scid, e
+				}
+			}
+		}
+	}
+
+	return scid, rpc.Entry{}
 }
 
 // delete most of the data and prepare for rescan
@@ -324,6 +353,11 @@ func (w *Wallet_Memory) Clean() {
 	for k := range w.account.EntriesNative {
 		delete(w.account.EntriesNative, k)
 	}
+
+	for k := range w.account.Balance {
+		delete(w.account.Balance, k)
+	}
+
 	w.account.RingMembers = map[string]int64{}
 	w.account.Balance_Result = w.account.Balance_Result[:0]
 	w.account.Registered = false
@@ -543,14 +577,18 @@ func (w *Wallet_Memory) sign() (c, s *big.Int) {
 	return
 }
 
-// retrieve  secret key for any tx we may have created
+// retrieve secret key for any tx we may have created
 func (w *Wallet_Memory) GetTXKey(txhash string) string {
+	w.Lock()
+	defer w.Unlock()
 
-	/*for _, e := range w.account.Entries {
-		if !e.Coinbase && !e.Incoming && e.TXID == txhash {
-			return e.Proof
+	for _, entries := range w.account.EntriesNative {
+		for _, e := range entries {
+			if e.TXID == txhash {
+				return e.Proof
+			}
 		}
-	}*/
+	}
 
 	return ""
 }

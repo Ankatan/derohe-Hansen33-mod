@@ -68,9 +68,12 @@ type Connection struct {
 	BytesOut              uint64 // total bytes out
 	Top_Version           uint64 // current hard fork version supported by peer
 	Peer_ID               uint64 // Remote peer id
-	Port                  uint32 // port advertised by other end as its server,if it's 0 server cannot accept connections
-	State                 uint32 // state of the connection
-	Syncing               int32  // denotes whether we are syncing and thus stop pinging
+	ping_count            int64
+	clock_offset          int64 // duration updated on every miniblock
+
+	Port    uint32 // port advertised by other end as its server,if it's 0 server cannot accept connections
+	State   uint32 // state of the connection
+	Syncing int32  // denotes whether we are syncing and thus stop pinging
 
 	Client  *rpc2.Client
 	Conn    net.Conn // actual object to talk
@@ -96,12 +99,9 @@ type Connection struct {
 	update_received  time.Time // last time when upated was received
 	ping_in_progress int32     // contains ping pending against this connection
 
-	ping_count int64
-
 	clock_index   int
 	clock_offsets [MAX_CLOCK_DATA_SET]time.Duration
 	delays        [MAX_CLOCK_DATA_SET]time.Duration
-	clock_offset  int64 // duration updated on every miniblock
 	onceexit      sync.Once
 
 	Mutex       sync.Mutex // used only by connection go routine
