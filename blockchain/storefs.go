@@ -288,8 +288,7 @@ func (s *storefs) ReadTX(h [32]byte) ([]byte, error) {
 		dir := s.getpath(h)
 		file := filepath.Join(dir, fmt.Sprintf("%x.tx", h[:]))
 		if data, err := ioutil.ReadFile(file); err == nil {
-			logger.V(4).Info("cannot read tx", "tx", fmt.Sprintf("%x", h), "err", err)
-			return data, fmt.Errorf("tx %x not found", h[:])
+			return data, nil
 		}
 	}
 
